@@ -1,65 +1,225 @@
-import Image from "next/image";
+"use client";
+
+import { useState } from "react";
+import { motion } from "framer-motion";
 
 export default function Home() {
+  const [files, setFiles] = useState<FileList | null>(null);
+  const [rotation, setRotation] = useState<number>(0);
+  const [flip, setFlip] = useState<boolean>(false);
+  const [brightness, setBrightness] = useState<number>(1);
+  const [contrast, setContrast] = useState<number>(1);
+  const [blur, setBlur] = useState<number>(0);
+  const [noise, setNoise] = useState<number>(0);
+  const [loading, setLoading] = useState<boolean>(false);
+
+  const handleUpload = async () => {
+    if (!files || files.length === 0) return;
+
+    setLoading(true);
+
+    const formData = new FormData();
+    Array.from(files).forEach((file) =>
+      formData.append("images", file)
+    );
+
+    formData.append("rotation", rotation.toString());
+    formData.append("flip", flip ? "true" : "false");
+    formData.append("brightness", brightness.toString());
+    formData.append("contrast", contrast.toString());
+    formData.append("blur", blur.toString());
+    formData.append("noise", noise.toString());
+
+    const res = await fetch("/api/augment", {
+      method: "POST",
+      body: formData,
+    });
+
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "augmented_images.zip";
+    a.click();
+
+    setLoading(false);
+  };
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
+    <div className="min-h-screen bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-500 flex items-center justify-center p-6">
+      <motion.div
+        initial={{ opacity: 0, y: 40 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.6 }}
+        className="bg-white/10 backdrop-blur-lg shadow-2xl rounded-3xl p-8 w-full max-w-4xl text-white"
+      >
+        <h1 className="text-4xl font-bold mb-6 text-center">
+          Dataset Augmentation Studio
+        </h1>
+
+        {/* Upload Section */}
+        <div className="space-y-4">
+
+          {/* Single / Multiple Image Upload */}
+          <div className="border-2 border-dashed border-white/40 rounded-xl p-6 text-center hover:bg-white/10 transition duration-300">
+            <input
+              type="file"
+              multiple
+              accept="image/*"
+              onChange={(e) => setFiles(e.target.files)}
+              className="hidden"
+              id="imageUpload"
             />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+            <label htmlFor="imageUpload" className="cursor-pointer text-lg">
+              Select Image(s)
+            </label>
+          </div>
+
+          {/* Folder Upload */}
+          <div className="border-2 border-dashed border-white/40 rounded-xl p-6 text-center hover:bg-white/10 transition duration-300">
+            <input
+              type="file"
+              multiple
+              accept="image/*"
+              {...({ webkitdirectory: "true" } as any)}
+              onChange={(e) => setFiles(e.target.files)}
+              className="hidden"
+              id="folderUpload"
+            />
+            <label htmlFor="folderUpload" className="cursor-pointer text-lg">
+              Select Folder
+            </label>
+          </div>
+
+          {files && (
+            <p className="text-sm text-center text-white/80">
+              {files.length} file(s) selected
+            </p>
+          )}
         </div>
-      </main>
+
+        {/* Controls */}
+        <div className="mt-6 space-y-5">
+          <Slider
+            label="Rotation"
+            value={rotation}
+            min={0}
+            max={360}
+            onChange={setRotation}
+          />
+
+          <Checkbox
+            label="Flip vertically"
+            checked={flip}
+            onChange={setFlip}
+          />
+
+          <Slider
+            label="Brightness"
+            value={brightness}
+            min={0.5}
+            max={2}
+            step={0.1}
+            onChange={setBrightness}
+          />
+
+          <Slider
+            label="Contrast"
+            value={contrast}
+            min={0.5}
+            max={2}
+            step={0.1}
+            onChange={setContrast}
+          />
+
+          <Slider
+            label="Blur"
+            value={blur}
+            min={0}
+            max={10}
+            onChange={setBlur}
+          />
+
+          <Slider
+            label="Noise"
+            value={noise}
+            min={0}
+            max={50}
+            onChange={setNoise}
+          />
+        </div>
+
+        {/* Button */}
+        <div className="text-center mt-6">
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={handleUpload}
+            className="bg-white text-purple-700 font-semibold px-6 py-3 rounded-full shadow-lg"
+          >
+            {loading ? "Processing..." : "Generate & Download ZIP"}
+          </motion.button>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
+// ---------- Slider ----------
+function Slider({
+  label,
+  value,
+  min,
+  max,
+  step = 1,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  step?: number;
+  onChange: (v: number) => void;
+}) {
+  return (
+    <div>
+      <label className="flex justify-between text-sm mb-1">
+        <span>{label}</span>
+        <span>{value}</span>
+      </label>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="w-full accent-pink-400"
+      />
+    </div>
+  );
+}
+
+// ---------- Checkbox ----------
+function Checkbox({
+  label,
+  checked,
+  onChange,
+}: {
+  label: string;
+  checked: boolean;
+  onChange: (v: boolean) => void;
+}) {
+  return (
+    <div className="flex items-center space-x-2">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+        className="accent-pink-400"
+      />
+      <span>{label}</span>
     </div>
   );
 }
