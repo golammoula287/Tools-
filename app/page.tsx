@@ -1,225 +1,255 @@
 "use client";
 
-import { useState } from "react";
-import { motion } from "framer-motion";
+import { useMemo, useState } from "react";
+import UploadPanel from "./components/UploadPanel";
+import PresetSelector from "./components/PresetSelector";
+import ModeToggle from "./components/ModeToggle";
+import FilterPanel from "./components/FilterPanel";
+import OutputPanel from "./components/OutputPanel";
+import ResultsGrid from "./components/ResultsGrid";
+import { buildPresets } from "@/lib/presets";
+import { OUTPUT_SIZE_MULTIPLIER, REQUEST_BYTE_BUDGET, RESPONSE_BYTE_BUDGET, buildBatches } from "@/lib/batching";
+import { compressFilesToBudget } from "@/lib/client-image-prep";
+import {
+  AugmentMode,
+  AugmentRequestConfig,
+  FilterKey,
+  FilterState,
+  FiltersConfig,
+  OutputConfig,
+  PresetName,
+  RenameConfig,
+  ResultImage,
+} from "@/lib/types";
 
 export default function Home() {
-  const [files, setFiles] = useState<FileList | null>(null);
-  const [rotation, setRotation] = useState<number>(0);
-  const [flip, setFlip] = useState<boolean>(false);
-  const [brightness, setBrightness] = useState<number>(1);
-  const [contrast, setContrast] = useState<number>(1);
-  const [blur, setBlur] = useState<number>(0);
-  const [noise, setNoise] = useState<number>(0);
-  const [loading, setLoading] = useState<boolean>(false);
+  const presets = useMemo(() => buildPresets(), []);
 
-  const handleUpload = async () => {
-    if (!files || files.length === 0) return;
+  const [files, setFiles] = useState<File[]>([]);
+  const [preset, setPreset] = useState<PresetName>("coin");
+  const [mode, setMode] = useState<AugmentMode>("manual");
+  const [variantsPerImage, setVariantsPerImage] = useState(presets.coin.variantsPerImage);
+  const [filters, setFilters] = useState<FiltersConfig>(presets.coin.filters);
+
+  const [output, setOutput] = useState<OutputConfig>({ format: "original", quality: 85 });
+  const [rename, setRename] = useState<RenameConfig>({
+    enabled: false,
+    baseName: "dataset",
+    startIndex: 1,
+    padding: 3,
+  });
+  const [zipName, setZipName] = useState("augmented_dataset");
+
+  const [loading, setLoading] = useState(false);
+  const [progress, setProgress] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [results, setResults] = useState<ResultImage[]>([]);
+
+  const handlePresetChange = (id: PresetName) => {
+    setPreset(id);
+    setFilters(presets[id].filters);
+    setVariantsPerImage(presets[id].variantsPerImage);
+  };
+
+  const handleFilterChange = (key: FilterKey, patch: Partial<FilterState>) => {
+    setFilters((prev) => {
+      const current = prev[key];
+      if (!current) return prev;
+      return { ...prev, [key]: { ...current, ...patch } };
+    });
+  };
+
+  const handleAddFiles = (newFiles: File[]) => {
+    setFiles((prev) => [...prev, ...newFiles]);
+    setError(null);
+  };
+
+  const handleRemoveFile = (index: number) => {
+    setFiles((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleGenerate = async () => {
+    if (files.length === 0) {
+      setError("Select at least one image first.");
+      return;
+    }
 
     setLoading(true);
+    setError(null);
+    setNotice(null);
+    setProgress(null);
 
-    const formData = new FormData();
-    Array.from(files).forEach((file) =>
-      formData.append("images", file)
-    );
+    // Vercel caps request/response bodies at 4.5MB, so large or numerous images are
+    // split into multiple requests that each stay safely under that limit. Any single
+    // image too big for its share of that budget is shrunk client-side first.
+    const effectiveVariants = mode === "random" ? variantsPerImage : 1;
+    const perFileCap =
+      Math.min(REQUEST_BYTE_BUDGET, RESPONSE_BYTE_BUDGET / (effectiveVariants * OUTPUT_SIZE_MULTIPLIER)) * 0.85;
 
-    formData.append("rotation", rotation.toString());
-    formData.append("flip", flip ? "true" : "false");
-    formData.append("brightness", brightness.toString());
-    formData.append("contrast", contrast.toString());
-    formData.append("blur", blur.toString());
-    formData.append("noise", noise.toString());
+    setProgress("Optimizing large images for upload...");
+    const { prepared, compressedCount } = await compressFilesToBudget(files, perFileCap);
+    if (compressedCount > 0) {
+      setNotice(
+        `${compressedCount} large image(s) were auto-compressed before upload to fit within Vercel's request size limits.`
+      );
+    }
 
-    const res = await fetch("/api/augment", {
-      method: "POST",
-      body: formData,
-    });
+    const { batches, skipped } = buildBatches(prepared, effectiveVariants);
 
-    const blob = await res.blob();
-    const url = window.URL.createObjectURL(blob);
+    if (batches.length === 0) {
+      setLoading(false);
+      setError(
+        "Every selected file is too large to process — try smaller images or fewer variants per image."
+      );
+      return;
+    }
 
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "augmented_images.zip";
-    a.click();
+    const allResults: ResultImage[] = [];
+    const batchErrors: string[] = [];
 
+    for (let i = 0; i < batches.length; i++) {
+      if (batches.length > 1) {
+        setProgress(`Processing batch ${i + 1} of ${batches.length}...`);
+      }
+
+      try {
+        const config: AugmentRequestConfig = {
+          mode,
+          variantsPerImage,
+          filters,
+          output,
+          rename: rename.enabled
+            ? { ...rename, startIndex: rename.startIndex + allResults.length }
+            : rename,
+        };
+
+        const formData = new FormData();
+        batches[i].forEach((file) => formData.append("images", file));
+        formData.append("config", JSON.stringify(config));
+
+        const res = await fetch("/api/augment", { method: "POST", body: formData });
+        const data = await res.json();
+
+        if (!res.ok) {
+          batchErrors.push(data.error || `Batch ${i + 1} failed.`);
+          continue;
+        }
+
+        allResults.push(...(data.results || []));
+      } catch {
+        batchErrors.push(`Batch ${i + 1}: could not reach the server.`);
+      }
+    }
+
+    if (skipped.length > 0) {
+      batchErrors.unshift(
+        `${skipped.length} file(s) skipped (too large for a single request): ${skipped
+          .map((f) => f.name)
+          .join(", ")}`
+      );
+    }
+
+    setResults(allResults);
+    setProgress(null);
     setLoading(false);
+    if (batchErrors.length > 0) setError(batchErrors.join(" "));
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-500 flex items-center justify-center p-6">
-      <motion.div
-        initial={{ opacity: 0, y: 40 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6 }}
-        className="bg-white/10 backdrop-blur-lg shadow-2xl rounded-3xl p-8 w-full max-w-4xl text-white"
-      >
-        <h1 className="text-4xl font-bold mb-6 text-center">
-          Dataset Augmentation Studio
-        </h1>
+    <div className="min-h-screen bg-gradient-to-br from-indigo-700 via-purple-700 to-pink-600 text-white">
+      <div className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
+        <header className="mb-6 text-center lg:text-left">
+          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold">
+            Dataset Augmentation Studio
+          </h1>
+          <p className="text-sm sm:text-base text-white/70 mt-1">
+            Generate realistic augmented variants for any image dataset — coins, objects,
+            documents and more.
+          </p>
+        </header>
 
-        {/* Upload Section */}
-        <div className="space-y-4">
+        <div className="grid grid-cols-1 lg:grid-cols-[380px_1fr] gap-6">
+          {/* Sidebar */}
+          <aside className="space-y-5 lg:sticky lg:top-6 lg:self-start">
+            <section className="bg-white/10 backdrop-blur-lg rounded-2xl p-4 sm:p-5 shadow-xl space-y-4">
+              <UploadPanel
+                files={files}
+                onAddFiles={handleAddFiles}
+                onRemoveFile={handleRemoveFile}
+                onClear={() => setFiles([])}
+              />
+            </section>
 
-          {/* Single / Multiple Image Upload */}
-          <div className="border-2 border-dashed border-white/40 rounded-xl p-6 text-center hover:bg-white/10 transition duration-300">
-            <input
-              type="file"
-              multiple
-              accept="image/*"
-              onChange={(e) => setFiles(e.target.files)}
-              className="hidden"
-              id="imageUpload"
-            />
-            <label htmlFor="imageUpload" className="cursor-pointer text-lg">
-              Select Image(s)
-            </label>
-          </div>
+            <section className="bg-white/10 backdrop-blur-lg rounded-2xl p-4 sm:p-5 shadow-xl space-y-4">
+              <PresetSelector presets={presets} value={preset} onChange={handlePresetChange} />
+              <div className="h-px bg-white/10" />
+              <ModeToggle
+                mode={mode}
+                onModeChange={setMode}
+                variantsPerImage={variantsPerImage}
+                onVariantsChange={setVariantsPerImage}
+              />
+            </section>
 
-          {/* Folder Upload */}
-          <div className="border-2 border-dashed border-white/40 rounded-xl p-6 text-center hover:bg-white/10 transition duration-300">
-            <input
-              type="file"
-              multiple
-              accept="image/*"
-              {...({ webkitdirectory: "true" } as any)}
-              onChange={(e) => setFiles(e.target.files)}
-              className="hidden"
-              id="folderUpload"
-            />
-            <label htmlFor="folderUpload" className="cursor-pointer text-lg">
-              Select Folder
-            </label>
-          </div>
+            <section className="bg-white/10 backdrop-blur-lg rounded-2xl p-4 sm:p-5 shadow-xl">
+              <OutputPanel
+                output={output}
+                onOutputChange={(patch) => setOutput((prev) => ({ ...prev, ...patch }))}
+                rename={rename}
+                onRenameChange={(patch) => setRename((prev) => ({ ...prev, ...patch }))}
+                zipName={zipName}
+                onZipNameChange={setZipName}
+              />
+            </section>
 
-          {files && (
-            <p className="text-sm text-center text-white/80">
-              {files.length} file(s) selected
-            </p>
-          )}
+            {notice && (
+              <div className="rounded-xl bg-blue-400/15 border border-blue-300/30 px-4 py-3 text-sm text-blue-100">
+                {notice}
+              </div>
+            )}
+
+            {error && (
+              <div className="rounded-xl bg-red-500/20 border border-red-400/40 px-4 py-3 text-sm text-red-100">
+                {error}
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={handleGenerate}
+              disabled={loading}
+              className="w-full py-3.5 rounded-2xl bg-white text-purple-700 font-semibold shadow-lg hover:bg-white/90 active:scale-[0.99] transition disabled:opacity-60 disabled:active:scale-100"
+            >
+              {loading
+                ? "Processing..."
+                : `Generate ${mode === "random" ? "augmented variants" : "images"}`}
+            </button>
+            {loading && progress && (
+              <p className="text-center text-xs text-white/60 -mt-2">{progress}</p>
+            )}
+          </aside>
+
+          {/* Main content */}
+          <main className="space-y-6">
+            <section className="bg-white/10 backdrop-blur-lg rounded-2xl p-4 sm:p-5 shadow-xl">
+              <h2 className="text-lg font-semibold mb-3">Filters</h2>
+              <FilterPanel filters={filters} mode={mode} onChange={handleFilterChange} />
+            </section>
+
+            {results.length > 0 && (
+              <section className="bg-white/10 backdrop-blur-lg rounded-2xl p-4 sm:p-5 shadow-xl">
+                <h2 className="text-lg font-semibold mb-3">Results</h2>
+                <ResultsGrid
+                  results={results}
+                  zipName={zipName}
+                  onReset={() => setResults([])}
+                />
+              </section>
+            )}
+          </main>
         </div>
-
-        {/* Controls */}
-        <div className="mt-6 space-y-5">
-          <Slider
-            label="Rotation"
-            value={rotation}
-            min={0}
-            max={360}
-            onChange={setRotation}
-          />
-
-          <Checkbox
-            label="Flip vertically"
-            checked={flip}
-            onChange={setFlip}
-          />
-
-          <Slider
-            label="Brightness"
-            value={brightness}
-            min={0.5}
-            max={2}
-            step={0.1}
-            onChange={setBrightness}
-          />
-
-          <Slider
-            label="Contrast"
-            value={contrast}
-            min={0.5}
-            max={2}
-            step={0.1}
-            onChange={setContrast}
-          />
-
-          <Slider
-            label="Blur"
-            value={blur}
-            min={0}
-            max={10}
-            onChange={setBlur}
-          />
-
-          <Slider
-            label="Noise"
-            value={noise}
-            min={0}
-            max={50}
-            onChange={setNoise}
-          />
-        </div>
-
-        {/* Button */}
-        <div className="text-center mt-6">
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={handleUpload}
-            className="bg-white text-purple-700 font-semibold px-6 py-3 rounded-full shadow-lg"
-          >
-            {loading ? "Processing..." : "Generate & Download ZIP"}
-          </motion.button>
-        </div>
-      </motion.div>
-    </div>
-  );
-}
-
-// ---------- Slider ----------
-function Slider({
-  label,
-  value,
-  min,
-  max,
-  step = 1,
-  onChange,
-}: {
-  label: string;
-  value: number;
-  min: number;
-  max: number;
-  step?: number;
-  onChange: (v: number) => void;
-}) {
-  return (
-    <div>
-      <label className="flex justify-between text-sm mb-1">
-        <span>{label}</span>
-        <span>{value}</span>
-      </label>
-      <input
-        type="range"
-        min={min}
-        max={max}
-        step={step}
-        value={value}
-        onChange={(e) => onChange(Number(e.target.value))}
-        className="w-full accent-pink-400"
-      />
-    </div>
-  );
-}
-
-// ---------- Checkbox ----------
-function Checkbox({
-  label,
-  checked,
-  onChange,
-}: {
-  label: string;
-  checked: boolean;
-  onChange: (v: boolean) => void;
-}) {
-  return (
-    <div className="flex items-center space-x-2">
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={(e) => onChange(e.target.checked)}
-        className="accent-pink-400"
-      />
-      <span>{label}</span>
+      </div>
     </div>
   );
 }

@@ -1,137 +1,26 @@
-
-// import sharp from "sharp";
-// import JSZip from "jszip";
-// import { NextResponse } from "next/server";
-
-// export const runtime = "nodejs";
-
-// // ---------- Noise Helper ----------
-// async function addNoise(
-//   buffer: Buffer,
-//   intensity: number
-// ): Promise<Buffer> {
-//   const { data, info } = await sharp(buffer)
-//     .raw()
-//     .toBuffer({ resolveWithObject: true });
-
-//   const noisy = Buffer.from(data);
-
-//   for (let i = 0; i < noisy.length; i++) {
-//     const random = Math.floor(Math.random() * intensity);
-//     noisy[i] = Math.min(255, noisy[i] + random);
-//   }
-
-//   return sharp(noisy, { raw: info }).png().toBuffer();
-// }
-
-// // ---------- POST ----------
-// export async function POST(req: Request) {
-//   try {
-//     const formData = await req.formData();
-
-//     const rawFiles = formData.getAll("images");
-//     const files = rawFiles as File[];
-
-//     if (!files || files.length === 0) {
-//       return NextResponse.json(
-//         { error: "No images uploaded" },
-//         { status: 400 }
-//       );
-//     }
-
-//     // Parameters
-//     const rotation = parseInt(
-//       (formData.get("rotation") as string) || "0"
-//     );
-//     const flip = (formData.get("flip") as string) === "true";
-//     const brightness = parseFloat(
-//       (formData.get("brightness") as string) || "1"
-//     );
-//     const contrast = parseFloat(
-//       (formData.get("contrast") as string) || "1"
-//     );
-//     const blur = parseInt(
-//       (formData.get("blur") as string) || "0"
-//     );
-//     const noise = parseInt(
-//       (formData.get("noise") as string) || "0"
-//     );
-
-//     const zip = new JSZip();
-
-//     for (const file of files) {
-//       const arrayBuffer = await file.arrayBuffer();
-//       let buffer = Buffer.from(arrayBuffer);
-
-//       let image = sharp(buffer).rotate(rotation);
-
-//       if (flip) {
-//         image = image.flip();
-//       }
-
-//       image = image.modulate({ brightness }).linear(contrast, 0);
-
-//       if (blur > 0) {
-//         image = image.blur(blur);
-//       }
-
-//       buffer = await image.png().toBuffer();
-
-//       if (noise > 0) {
-//         buffer = await addNoise(buffer, noise);
-//       }
-
-//       const baseName =
-//         file.name?.replace(/\.[^/.]+$/, "") || "untitled";
-
-//       const finalName = `${baseName}_augmented.png`;
-
-//       zip.file(finalName, buffer);
-//     }
-
-//     const zipBuffer = await zip.generateAsync({
-//       type: "nodebuffer",
-//     });
-
-//     return new NextResponse(zipBuffer, {
-//       headers: {
-//         "Content-Type": "application/zip",
-//         "Content-Disposition":
-//           "attachment; filename=augmented_images.zip",
-//       },
-//     });
-//   } catch (error) {
-//     console.error("Augmentation Error:", error);
-
-//     return NextResponse.json(
-//       { error: "Server Error" },
-//       { status: 500 }
-//     );
-//   }
-// }
-
-import sharp from "sharp";
-import JSZip from "jszip";
 import { NextResponse } from "next/server";
+import { applyFilters, resolveVariantValues } from "@/lib/augment-engine";
+import { AugmentRequestConfig, ResultImage } from "@/lib/types";
 
 export const runtime = "nodejs";
+// Give large-folder batches (chunked client-side into many requests) headroom to finish
+// well within Vercel's function duration ceiling instead of the 10s default.
+export const maxDuration = 60;
 
-// Add Noise Function
-async function addNoise(buffer: Buffer, intensity: number) {
-  const { data, info } = await sharp(buffer)
-    .raw()
-    .toBuffer({ resolveWithObject: true });
+// The client already splits a whole dataset (into the GBs) into many small requests that
+// each stay under Vercel's 4.5MB body limit, so this is just a generous per-request safety net.
+const MAX_FILES = 5000;
+const MAX_FILE_BYTES = 30 * 1024 * 1024; // 30MB per file
+const MAX_VARIANTS = 20;
 
-  const noisy = Buffer.from(data);
+function sanitizeBaseName(name: string): string {
+  const cleaned = name.trim().replace(/[^a-zA-Z0-9_-]+/g, "_");
+  return cleaned || "image";
+}
 
-  for (let i = 0; i < noisy.length; i++) {
-    const rand = Math.floor(Math.random() * intensity);
-    noisy[i] = Math.min(255, noisy[i] + rand);
-  }
-
-  const output = await sharp(noisy, { raw: info }).png().toBuffer();
-
-  return Buffer.from(output);
+function stripExtension(name: string): string {
+  const idx = name.lastIndexOf(".");
+  return idx > 0 ? name.slice(0, idx) : name;
 }
 
 export async function POST(req: Request) {
@@ -139,74 +28,103 @@ export async function POST(req: Request) {
     const formData = await req.formData();
 
     const rawFiles = formData.getAll("images");
-    const files: File[] = rawFiles.filter(
-      (file): file is File => file instanceof File
-    );
+    const files: File[] = rawFiles.filter((f): f is File => f instanceof File);
 
-    const rotation = parseInt((formData.get("rotation") as string) || "0");
-    const flip = (formData.get("flip") as string) === "true";
-    const brightness = parseFloat((formData.get("brightness") as string) || "1");
-    const contrast = parseFloat((formData.get("contrast") as string) || "1");
-    const blur = parseFloat((formData.get("blur") as string) || "0");
-    const noise = parseInt((formData.get("noise") as string) || "0");
-
-    const zip = new JSZip();
-
+    if (files.length === 0) {
+      return NextResponse.json({ error: "No images were provided." }, { status: 400 });
+    }
+    if (files.length > MAX_FILES) {
+      return NextResponse.json(
+        { error: `Too many files. Please upload ${MAX_FILES} or fewer at a time.` },
+        { status: 400 }
+      );
+    }
     for (const file of files) {
-      let buffer = Buffer.from(await file.arrayBuffer());
-
-      let image = sharp(buffer);
-
-      // Rotation
-      if (rotation !== 0) {
-        image = image.rotate(rotation);
+      if (file.size > MAX_FILE_BYTES) {
+        return NextResponse.json(
+          { error: `"${file.name}" is larger than the 30MB per-file limit.` },
+          { status: 400 }
+        );
       }
-
-      // Flip
-      if (flip) {
-        image = image.flip();
-      }
-
-      // Brightness
-      image = image.modulate({ brightness });
-
-      // Contrast
-      image = image.linear(contrast, 0);
-
-      // Blur
-      if (blur > 0) {
-        image = image.blur(blur);
-      }
-
-      buffer = Buffer.from(await image.png().toBuffer());
-
-      // Noise
-      if (noise > 0) {
-        buffer = await addNoise(buffer, noise);
-      }
-
-      const fileName =
-        file.name.replace(/\.[^/.]+$/, "") + "_augmented.png";
-
-      zip.file(fileName, buffer);
     }
 
-    const zipBuffer = Buffer.from(
-      await zip.generateAsync({ type: "nodebuffer" })
-    );
+    const configRaw = formData.get("config");
+    if (typeof configRaw !== "string") {
+      return NextResponse.json({ error: "Missing augmentation config." }, { status: 400 });
+    }
 
-    return new NextResponse(zipBuffer, {
-      headers: {
-        "Content-Type": "application/zip",
-        "Content-Disposition": "attachment; filename=augmented_images.zip",
-      },
-    });
+    let config: AugmentRequestConfig;
+    try {
+      config = JSON.parse(configRaw);
+    } catch {
+      return NextResponse.json({ error: "Invalid augmentation config." }, { status: 400 });
+    }
+
+    const mode = config.mode === "random" ? "random" : "manual";
+    const variantsPerImage =
+      mode === "random"
+        ? Math.min(MAX_VARIANTS, Math.max(1, Math.round(config.variantsPerImage || 1)))
+        : 1;
+
+    const rename = config.rename || {
+      enabled: false,
+      baseName: "image",
+      startIndex: 1,
+      padding: 3,
+    };
+    const baseName = sanitizeBaseName(rename.baseName || "image");
+    const padding = Math.min(6, Math.max(1, Math.round(rename.padding ?? 3)));
+    let counter = Math.max(0, Math.round(rename.startIndex ?? 1));
+
+    const output = config.output || { format: "original", quality: 85 };
+
+    const results: ResultImage[] = [];
+
+    for (const file of files) {
+      const inputBuffer = Buffer.from(await file.arrayBuffer());
+      const originalStem = stripExtension(file.name);
+
+      for (let variantIndex = 0; variantIndex < variantsPerImage; variantIndex++) {
+        const resolved = resolveVariantValues(config.filters || {}, mode);
+
+        let processed;
+        try {
+          processed = await applyFilters(inputBuffer, resolved, output);
+        } catch (err) {
+          console.error(`Failed to process ${file.name}:`, err);
+          continue;
+        }
+
+        let outName: string;
+        if (rename.enabled) {
+          const padded = String(counter).padStart(padding, "0");
+          outName = `${baseName}_${padded}.${processed.extension}`;
+          counter++;
+        } else {
+          const suffix = variantsPerImage > 1 ? `_aug${variantIndex + 1}` : "";
+          outName = `${sanitizeBaseName(originalStem)}${suffix}.${processed.extension}`;
+        }
+
+        results.push({
+          name: outName,
+          mimeType: processed.mimeType,
+          dataBase64: processed.buffer.toString("base64"),
+          originalName: file.name,
+          variantIndex,
+        });
+      }
+    }
+
+    if (results.length === 0) {
+      return NextResponse.json(
+        { error: "None of the images could be processed." },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({ results });
   } catch (error) {
     console.error(error);
-
-    return NextResponse.json(
-      { error: "Image augmentation failed" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Image augmentation failed." }, { status: 500 });
   }
 }
