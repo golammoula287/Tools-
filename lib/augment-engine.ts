@@ -113,6 +113,8 @@ export function extensionForFormat(format: OutputFormat, fallback: string): stri
       return "jpg";
     case "webp":
       return "webp";
+    case "tiff":
+      return "tiff";
     default:
       return fallback || "png";
   }
@@ -126,6 +128,8 @@ export function mimeTypeForFormat(format: OutputFormat, fallback: string): strin
       return "image/jpeg";
     case "webp":
       return "image/webp";
+    case "tiff":
+      return "image/tiff";
     default:
       return fallback || "image/png";
   }
@@ -257,6 +261,8 @@ export async function applyFilters(
     image = image.jpeg({ quality });
   } else if (format === "webp") {
     image = image.webp({ quality });
+  } else if (format === "tiff") {
+    image = image.tiff({ quality });
   } else {
     try {
       image = image.toFormat(originalFormat as keyof sharp.FormatEnum);

@@ -20,12 +20,14 @@ export default function ModeToggle({
       <p className="text-xs font-semibold uppercase tracking-wide text-white/50">
         Augmentation mode
       </p>
-      <div className="grid grid-cols-2 gap-2 p-1 rounded-xl bg-black/20">
+      <div className="grid grid-cols-2 gap-1.5 p-1 rounded-xl bg-black/25 border border-white/10">
         <button
           type="button"
           onClick={() => onModeChange("manual")}
-          className={`py-2 rounded-lg text-sm font-medium transition-colors ${
-            mode === "manual" ? "bg-white text-purple-700" : "text-white/70 hover:text-white"
+          className={`py-2 rounded-lg text-sm font-medium transition-all ${
+            mode === "manual"
+              ? "bg-white text-violet-700 shadow"
+              : "text-white/70 hover:text-white hover:bg-white/5"
           }`}
         >
           Manual
@@ -33,8 +35,10 @@ export default function ModeToggle({
         <button
           type="button"
           onClick={() => onModeChange("random")}
-          className={`py-2 rounded-lg text-sm font-medium transition-colors ${
-            mode === "random" ? "bg-white text-purple-700" : "text-white/70 hover:text-white"
+          className={`py-2 rounded-lg text-sm font-medium transition-all ${
+            mode === "random"
+              ? "bg-white text-violet-700 shadow"
+              : "text-white/70 hover:text-white hover:bg-white/5"
           }`}
         >
           Random Augment
@@ -57,7 +61,7 @@ export default function ModeToggle({
             max={20}
             value={variantsPerImage}
             onChange={(e) => onVariantsChange(Number(e.target.value))}
-            className="w-20 p-2 rounded-lg text-black text-sm text-center"
+            className="w-20 p-2 rounded-lg bg-white text-slate-900 text-sm text-center border border-white/10 focus:outline-none focus:ring-2 focus:ring-fuchsia-400"
           />
         </div>
       )}

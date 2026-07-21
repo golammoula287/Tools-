@@ -41,7 +41,7 @@ export interface FilterState {
 
 export type FiltersConfig = Partial<Record<FilterKey, FilterState>>;
 
-export type OutputFormat = "original" | "png" | "jpeg" | "webp";
+export type OutputFormat = "original" | "png" | "jpeg" | "webp" | "tiff";
 
 export interface OutputConfig {
   format: OutputFormat;

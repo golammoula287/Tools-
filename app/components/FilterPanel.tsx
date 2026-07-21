@@ -38,7 +38,7 @@ function FilterRow({
               onChange({ enabled });
             }
           }}
-          className="mt-1 accent-pink-400 w-4 h-4 flex-shrink-0"
+          className="mt-1 accent-fuchsia-400 w-4 h-4 flex-shrink-0"
         />
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between gap-2">
@@ -63,7 +63,7 @@ function FilterRow({
                       max={100}
                       value={state.chance}
                       onChange={(e) => onChange({ chance: Number(e.target.value) })}
-                      className="w-full accent-pink-400"
+                      className="w-full accent-fuchsia-400"
                     />
                     <span className="text-xs text-white/60 w-10 text-right">{state.chance}%</span>
                   </div>
@@ -76,7 +76,7 @@ function FilterRow({
                   step={meta.step}
                   value={state.value}
                   onChange={(e) => onChange({ value: Number(e.target.value) })}
-                  className="w-full accent-pink-400"
+                  className="w-full accent-fuchsia-400"
                 />
               ) : (
                 <div className="flex items-center gap-2">
@@ -87,7 +87,7 @@ function FilterRow({
                     step={meta.step}
                     value={state.min}
                     onChange={(e) => onChange({ min: Number(e.target.value) })}
-                    className="w-full min-w-0 p-1.5 rounded-lg text-black text-xs text-center"
+                    className="w-full min-w-0 p-1.5 rounded-lg bg-white text-slate-900 text-xs text-center border border-white/10 focus:outline-none focus:ring-2 focus:ring-fuchsia-400"
                     aria-label={`${meta.label} minimum`}
                   />
                   <span className="text-white/40 text-xs flex-shrink-0">to</span>
@@ -98,7 +98,7 @@ function FilterRow({
                     step={meta.step}
                     value={state.max}
                     onChange={(e) => onChange({ max: Number(e.target.value) })}
-                    className="w-full min-w-0 p-1.5 rounded-lg text-black text-xs text-center"
+                    className="w-full min-w-0 p-1.5 rounded-lg bg-white text-slate-900 text-xs text-center border border-white/10 focus:outline-none focus:ring-2 focus:ring-fuchsia-400"
                     aria-label={`${meta.label} maximum`}
                   />
                   <span className="text-white/40 text-xs flex-shrink-0">{meta.unit || ""}</span>
@@ -122,13 +122,15 @@ export default function FilterPanel({ filters, mode, onChange }: FilterPanelProp
           <details
             key={group}
             open={group === "geometric" || group === "color"}
-            className="rounded-2xl bg-white/5 border border-white/10 overflow-hidden"
+            className="rounded-2xl bg-white/5 border border-white/10 overflow-hidden open:bg-white/[0.07]"
           >
-            <summary className="cursor-pointer select-none px-4 py-3 flex items-center justify-between text-sm font-semibold">
+            <summary className="cursor-pointer select-none px-4 py-3 flex items-center justify-between text-sm font-semibold hover:bg-white/5 transition-colors">
               <span>{FILTER_GROUP_LABELS[group]}</span>
-              <span className="text-xs font-normal text-white/50">
-                {enabledCount > 0 ? `${enabledCount} enabled` : ""}
-              </span>
+              {enabledCount > 0 && (
+                <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-fuchsia-400/15 text-fuchsia-200 border border-fuchsia-300/20">
+                  {enabledCount} enabled
+                </span>
+              )}
             </summary>
             <div className="px-4 pb-2">
               {groupFilters.map((meta) => {

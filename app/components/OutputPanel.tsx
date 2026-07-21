@@ -16,7 +16,16 @@ const FORMATS: { id: OutputFormat; label: string }[] = [
   { id: "png", label: "PNG" },
   { id: "jpeg", label: "JPEG" },
   { id: "webp", label: "WEBP" },
+  { id: "tiff", label: "TIFF" },
 ];
+
+const EXT_FALLBACK: Record<OutputFormat, string> = {
+  original: "jpg",
+  png: "png",
+  jpeg: "jpg",
+  webp: "webp",
+  tiff: "tiff",
+};
 
 export default function OutputPanel({
   output,
@@ -26,12 +35,13 @@ export default function OutputPanel({
   zipName,
   onZipNameChange,
 }: OutputPanelProps) {
+  const ext = EXT_FALLBACK[output.format];
   const previewName = rename.enabled
     ? `${rename.baseName || "image"}_${String(rename.startIndex ?? 1).padStart(
         Math.min(6, Math.max(1, rename.padding || 3)),
         "0"
-      )}.${output.format === "original" ? "jpg" : output.format}`
-    : `original-name.${output.format === "original" ? "jpg" : output.format}`;
+      )}.${ext}`
+    : `original-name.${ext}`;
 
   return (
     <div className="space-y-4">
@@ -42,7 +52,7 @@ export default function OutputPanel({
         <select
           value={output.format}
           onChange={(e) => onOutputChange({ format: e.target.value as OutputFormat })}
-          className="w-full p-2.5 rounded-xl text-black text-sm"
+          className="w-full p-2.5 rounded-xl bg-white text-slate-900 text-sm border border-white/10 focus:outline-none focus:ring-2 focus:ring-fuchsia-400"
         >
           {FORMATS.map((f) => (
             <option key={f.id} value={f.id}>
@@ -60,20 +70,20 @@ export default function OutputPanel({
               max={100}
               value={output.quality}
               onChange={(e) => onOutputChange({ quality: Number(e.target.value) })}
-              className="w-full accent-pink-400"
+              className="w-full accent-fuchsia-400"
             />
             <span className="text-xs text-white/60 w-10 text-right">{output.quality}%</span>
           </div>
         )}
       </div>
 
-      <div className="space-y-2 rounded-xl bg-black/20 p-3">
+      <div className="space-y-2 rounded-xl bg-black/25 border border-white/10 p-3">
         <label className="flex items-center gap-2 cursor-pointer">
           <input
             type="checkbox"
             checked={rename.enabled}
             onChange={(e) => onRenameChange({ enabled: e.target.checked })}
-            className="accent-pink-400 w-4 h-4"
+            className="accent-fuchsia-400 w-4 h-4"
           />
           <span className="text-sm font-medium">
             Rename files (serial numbering)
@@ -92,7 +102,7 @@ export default function OutputPanel({
                 value={rename.baseName}
                 onChange={(e) => onRenameChange({ baseName: e.target.value })}
                 placeholder="e.g. coin"
-                className="w-full mt-1 p-2 rounded-lg text-black text-sm"
+                className="w-full mt-1 p-2 rounded-lg bg-white text-slate-900 text-sm border border-white/10 focus:outline-none focus:ring-2 focus:ring-fuchsia-400"
               />
             </div>
             <div>
@@ -102,7 +112,7 @@ export default function OutputPanel({
                 min={0}
                 value={rename.startIndex}
                 onChange={(e) => onRenameChange({ startIndex: Number(e.target.value) })}
-                className="w-full mt-1 p-2 rounded-lg text-black text-sm"
+                className="w-full mt-1 p-2 rounded-lg bg-white text-slate-900 text-sm border border-white/10 focus:outline-none focus:ring-2 focus:ring-fuchsia-400"
               />
             </div>
             <div>
@@ -113,13 +123,13 @@ export default function OutputPanel({
                 max={6}
                 value={rename.padding}
                 onChange={(e) => onRenameChange({ padding: Number(e.target.value) })}
-                className="w-full mt-1 p-2 rounded-lg text-black text-sm"
+                className="w-full mt-1 p-2 rounded-lg bg-white text-slate-900 text-sm border border-white/10 focus:outline-none focus:ring-2 focus:ring-fuchsia-400"
               />
             </div>
           </div>
         )}
 
-        <p className="text-xs text-white/50 pt-1">
+        <p className="text-xs text-white/50 pt-1 break-all">
           Preview: <span className="font-mono text-white/80">{previewName}</span>
         </p>
       </div>
@@ -133,7 +143,7 @@ export default function OutputPanel({
           value={zipName}
           onChange={(e) => onZipNameChange(e.target.value)}
           placeholder="augmented_dataset"
-          className="w-full p-2.5 rounded-xl text-black text-sm"
+          className="w-full p-2.5 rounded-xl bg-white text-slate-900 text-sm border border-white/10 focus:outline-none focus:ring-2 focus:ring-fuchsia-400"
         />
       </div>
     </div>

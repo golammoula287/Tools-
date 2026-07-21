@@ -156,23 +156,40 @@ export default function Home() {
     if (batchErrors.length > 0) setError(batchErrors.join(" "));
   };
 
+  const cardClass =
+    "bg-white/[0.06] backdrop-blur-xl rounded-2xl sm:rounded-3xl p-4 sm:p-5 shadow-xl border border-white/10";
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-700 via-purple-700 to-pink-600 text-white">
-      <div className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
-        <header className="mb-6 text-center lg:text-left">
-          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold">
-            Dataset Augmentation Studio
-          </h1>
-          <p className="text-sm sm:text-base text-white/70 mt-1">
-            Generate realistic augmented variants for any image dataset — coins, objects,
-            documents and more.
-          </p>
+    <div className="min-h-screen relative overflow-x-hidden bg-slate-950 text-white">
+      <div className="pointer-events-none fixed inset-0 overflow-hidden">
+        <div className="absolute -top-32 -left-24 w-[26rem] h-[26rem] rounded-full bg-fuchsia-600/25 blur-[110px]" />
+        <div className="absolute top-1/3 -right-28 w-[26rem] h-[26rem] rounded-full bg-violet-600/25 blur-[110px]" />
+        <div className="absolute bottom-0 left-1/4 w-[22rem] h-[22rem] rounded-full bg-cyan-500/10 blur-[110px]" />
+      </div>
+
+      <div className="relative max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
+        <header className="mb-6 sm:mb-8 flex items-center justify-center lg:justify-start gap-3 text-center lg:text-left">
+          <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-2xl bg-gradient-to-br from-fuchsia-500 to-violet-600 flex items-center justify-center shadow-lg shadow-fuchsia-900/30 flex-shrink-0">
+            <svg viewBox="0 0 24 24" fill="none" className="w-5 h-5 sm:w-6 sm:h-6">
+              <path d="M12 2l1.8 5.2L19 9l-5.2 1.8L12 16l-1.8-5.2L5 9l5.2-1.8L12 2z" fill="white" />
+              <path d="M19 15l.7 2 2 .7-2 .7-.7 2-.7-2-2-.7 2-.7.7-2z" fill="white" fillOpacity={0.9} />
+            </svg>
+          </div>
+          <div>
+            <h1 className="text-xl sm:text-3xl lg:text-4xl font-bold tracking-tight">
+              Dataset Augmentation Studio
+            </h1>
+            <p className="text-xs sm:text-base text-white/55 mt-0.5">
+              Generate realistic augmented variants for any image dataset — coins, objects,
+              documents and more.
+            </p>
+          </div>
         </header>
 
-        <div className="grid grid-cols-1 lg:grid-cols-[380px_1fr] gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-[380px_1fr] gap-5 sm:gap-6">
           {/* Sidebar */}
-          <aside className="space-y-5 lg:sticky lg:top-6 lg:self-start">
-            <section className="bg-white/10 backdrop-blur-lg rounded-2xl p-4 sm:p-5 shadow-xl space-y-4">
+          <aside className="space-y-4 sm:space-y-5 lg:sticky lg:top-6 lg:self-start">
+            <section className={`${cardClass} space-y-4`}>
               <UploadPanel
                 files={files}
                 onAddFiles={handleAddFiles}
@@ -181,7 +198,7 @@ export default function Home() {
               />
             </section>
 
-            <section className="bg-white/10 backdrop-blur-lg rounded-2xl p-4 sm:p-5 shadow-xl space-y-4">
+            <section className={`${cardClass} space-y-4`}>
               <PresetSelector presets={presets} value={preset} onChange={handlePresetChange} />
               <div className="h-px bg-white/10" />
               <ModeToggle
@@ -192,7 +209,7 @@ export default function Home() {
               />
             </section>
 
-            <section className="bg-white/10 backdrop-blur-lg rounded-2xl p-4 sm:p-5 shadow-xl">
+            <section className={cardClass}>
               <OutputPanel
                 output={output}
                 onOutputChange={(patch) => setOutput((prev) => ({ ...prev, ...patch }))}
@@ -204,13 +221,13 @@ export default function Home() {
             </section>
 
             {notice && (
-              <div className="rounded-xl bg-blue-400/15 border border-blue-300/30 px-4 py-3 text-sm text-blue-100">
+              <div className="rounded-xl bg-cyan-400/10 border border-cyan-300/25 px-4 py-3 text-sm text-cyan-100">
                 {notice}
               </div>
             )}
 
             {error && (
-              <div className="rounded-xl bg-red-500/20 border border-red-400/40 px-4 py-3 text-sm text-red-100">
+              <div className="rounded-xl bg-red-500/15 border border-red-400/30 px-4 py-3 text-sm text-red-100">
                 {error}
               </div>
             )}
@@ -219,7 +236,7 @@ export default function Home() {
               type="button"
               onClick={handleGenerate}
               disabled={loading}
-              className="w-full py-3.5 rounded-2xl bg-white text-purple-700 font-semibold shadow-lg hover:bg-white/90 active:scale-[0.99] transition disabled:opacity-60 disabled:active:scale-100"
+              className="w-full py-3.5 rounded-2xl bg-white text-violet-700 font-semibold shadow-lg shadow-fuchsia-900/20 hover:bg-white/90 active:scale-[0.99] transition disabled:opacity-60 disabled:active:scale-100"
             >
               {loading
                 ? "Processing..."
@@ -231,14 +248,14 @@ export default function Home() {
           </aside>
 
           {/* Main content */}
-          <main className="space-y-6">
-            <section className="bg-white/10 backdrop-blur-lg rounded-2xl p-4 sm:p-5 shadow-xl">
+          <main className="space-y-5 sm:space-y-6 min-w-0">
+            <section className={cardClass}>
               <h2 className="text-lg font-semibold mb-3">Filters</h2>
               <FilterPanel filters={filters} mode={mode} onChange={handleFilterChange} />
             </section>
 
             {results.length > 0 && (
-              <section className="bg-white/10 backdrop-blur-lg rounded-2xl p-4 sm:p-5 shadow-xl">
+              <section className={cardClass}>
                 <h2 className="text-lg font-semibold mb-3">Results</h2>
                 <ResultsGrid
                   results={results}

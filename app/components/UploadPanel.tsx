@@ -50,8 +50,8 @@ export default function UploadPanel({ files, onAddFiles, onRemoveFile, onClear }
         onDrop={handleDrop}
         className={`rounded-2xl border-2 border-dashed p-5 sm:p-6 text-center transition-colors ${
           dragActive
-            ? "border-pink-400 bg-pink-400/10"
-            : "border-white/25 hover:border-white/40 hover:bg-white/5"
+            ? "border-fuchsia-400 bg-fuchsia-400/10"
+            : "border-white/20 hover:border-white/35 hover:bg-white/5"
         }`}
       >
         <p className="text-sm sm:text-base text-white/80 mb-3">
@@ -73,7 +73,7 @@ export default function UploadPanel({ files, onAddFiles, onRemoveFile, onClear }
           <button
             type="button"
             onClick={() => imageInputRef.current?.click()}
-            className="px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 active:bg-white/25 text-sm font-medium transition-colors"
+            className="px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 active:bg-white/25 border border-white/10 text-sm font-medium transition-colors"
           >
             Select image(s)
           </button>
@@ -94,7 +94,7 @@ export default function UploadPanel({ files, onAddFiles, onRemoveFile, onClear }
           <button
             type="button"
             onClick={() => folderInputRef.current?.click()}
-            className="px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 active:bg-white/25 text-sm font-medium transition-colors"
+            className="px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 active:bg-white/25 border border-white/10 text-sm font-medium transition-colors"
           >
             Select whole folder
           </button>
@@ -102,7 +102,7 @@ export default function UploadPanel({ files, onAddFiles, onRemoveFile, onClear }
       </div>
 
       {files.length > 0 && (
-        <div className="rounded-xl bg-black/20 p-3">
+        <div className="rounded-xl bg-black/25 border border-white/10 p-3">
           <div className="flex items-center justify-between mb-2">
             <p className="text-xs text-white/70">
               {files.length} image{files.length !== 1 ? "s" : ""} selected · {formatBytes(totalSize)}
@@ -110,7 +110,7 @@ export default function UploadPanel({ files, onAddFiles, onRemoveFile, onClear }
             <button
               type="button"
               onClick={onClear}
-              className="text-xs text-white/60 hover:text-pink-300 underline"
+              className="text-xs text-white/60 hover:text-fuchsia-300 underline"
             >
               Clear all
             </button>
